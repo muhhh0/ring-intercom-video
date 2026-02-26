@@ -38,15 +38,17 @@ def _patch_ring_other() -> None:
     if hasattr(RingOther, "generate_async_webrtc_stream"):
         return  # Already patched
 
-    _orig_init = RingOther.__init__
-
-    def _patched_init(self, *args, **kwargs):
-        _orig_init(self, *args, **kwargs)
-        self._webrtc_streams: dict[str, RingWebRtcStream] = {}
+    def _get_streams(self):
+        """Lazy-init _webrtc_streams for already-instantiated objects."""
+        if not hasattr(self, "_webrtc_streams"):
+            self._webrtc_streams = {}
+        return self._webrtc_streams
 
     async def generate_async_webrtc_stream(self, sdp_offer, session_id,
                                             on_message_callback, *,
                                             keep_alive_timeout=60 * 5):
+        streams = _get_streams(self)
+
         async def _close_callback():
             await self.close_webrtc_stream(session_id)
 
@@ -57,24 +59,25 @@ def _patch_ring_other() -> None:
             keep_alive_timeout=keep_alive_timeout,
             on_close_callback=_close_callback,
         )
-        self._webrtc_streams[session_id] = stream
+        streams[session_id] = stream
         await stream.generate(sdp_offer)
 
     async def on_webrtc_candidate(self, session_id, candidate, multi_line_index):
-        if stream := self._webrtc_streams.get(session_id):
+        streams = _get_streams(self)
+        if stream := streams.get(session_id):
             await stream.on_ice_candidate(candidate, multi_line_index)
 
     async def close_webrtc_stream(self, session_id):
-        stream = self._webrtc_streams.pop(session_id, None)
+        streams = _get_streams(self)
+        stream = streams.pop(session_id, None)
         if stream:
             await stream.close()
 
     def sync_close_webrtc_stream(self, session_id):
-        stream = self._webrtc_streams.pop(session_id, None)
+        streams = _get_streams(self)
+        stream = streams.pop(session_id, None)
         if stream:
             stream.sync_close()
-
-    RingOther.__init__ = _patched_init
     RingOther.generate_async_webrtc_stream = generate_async_webrtc_stream
     RingOther.on_webrtc_candidate = on_webrtc_candidate
     RingOther.close_webrtc_stream = close_webrtc_stream
