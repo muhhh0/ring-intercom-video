@@ -475,14 +475,20 @@ class RingIntercomCamera(Camera):
                             video_stream.width = frame.width
                             video_stream.height = frame.height
                             video_stream.pix_fmt = "yuv420p"
-                            video_stream.time_base = fractions.Fraction(1, 25)
+                            video_stream.time_base = fractions.Fraction(1, 90000)
+                            # Disable B-frames to avoid pts < dts ordering issues
+                            video_stream.gop_size = 25
+                            if hasattr(video_stream.codec_context, "max_b_frames"):
+                                video_stream.codec_context.max_b_frames = 0
                             _LOGGER.info(
                                 "Recording video stream: %dx%d",
                                 frame.width, frame.height,
                             )
                         # Override timestamps — WebRTC pts/time_base can be
                         # unreliable and produce multi-hour recordings.
-                        frame.pts = video_frame_count
+                        # Scale frame count to the stream's 90kHz time_base
+                        # (90000 / 25fps = 3600 ticks per frame)
+                        frame.pts = video_frame_count * 3600
                         frame.time_base = video_stream.time_base
                         video_frame_count += 1
                         for packet in video_stream.encode(frame):
