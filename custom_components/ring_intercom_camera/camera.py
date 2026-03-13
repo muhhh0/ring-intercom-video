@@ -619,10 +619,10 @@ class RingIntercomCamera(Camera):
                     video_frame_count, audio_frame_count,
                 )
 
-                # Delete file if no frames were captured
-                if video_frame_count == 0:
+                # Delete file if absolutely no media was captured at all
+                if video_frame_count == 0 and audio_frame_count == 0:
                     _LOGGER.warning(
-                        "No video frames received, deleting empty recording: %s",
+                        "No frames received at all, deleting empty recording: %s",
                         filename,
                     )
                     try:
