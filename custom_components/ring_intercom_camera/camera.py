@@ -97,9 +97,7 @@ class RingIntercomCamera(Camera):
         self._attr_unique_id = f"ring_intercom_camera_{device.device_api_id}"
         self._attr_brand = "Ring"
         self._attr_model = "Intercom Video"
-        self._attr_supported_features = (
-            CameraEntityFeature.STREAM | CameraEntityFeature.RECORD
-        )
+        self._attr_supported_features = CameraEntityFeature.STREAM
 
         # Snapshot cache
         self._last_image: bytes | None = None
