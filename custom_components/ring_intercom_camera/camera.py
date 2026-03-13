@@ -19,6 +19,7 @@ Three modes of operation:
 from __future__ import annotations
 
 import asyncio
+import fractions
 import logging
 import os
 import ssl
@@ -464,6 +465,7 @@ class RingIntercomCamera(Camera):
             nonlocal video_frame_count, audio_frame_count
 
             if track.kind == "video":
+                video_time_base = fractions.Fraction(1, 90000)
                 try:
                     while not recording_done.is_set():
                         frame = await asyncio.wait_for(track.recv(), timeout=5)
@@ -474,6 +476,7 @@ class RingIntercomCamera(Camera):
                             video_stream.width = frame.width
                             video_stream.height = frame.height
                             video_stream.pix_fmt = "yuv420p"
+                            video_stream.time_base = fractions.Fraction(1, 25)
                             _LOGGER.info(
                                 "Recording video stream: %dx%d",
                                 frame.width, frame.height,
@@ -502,6 +505,9 @@ class RingIntercomCamera(Camera):
                                 "aac", rate=frame.sample_rate
                             )
                             audio_stream.layout = frame.layout.name
+                            audio_stream.time_base = fractions.Fraction(
+                                1, frame.sample_rate
+                            )
                             _LOGGER.info(
                                 "Recording audio stream: %s @ %d Hz",
                                 frame.layout.name, frame.sample_rate,
