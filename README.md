@@ -6,6 +6,25 @@ Home Assistant custom component that adds a **WebRTC live-stream camera** for th
 
 The official Ring integration only exposes lock and ding entities for intercoms. This component adds the missing camera entity with native WebRTC live view — the same streaming technology Ring uses for its doorbell cameras.
 
+## Recording feature (WIP / experimental)
+
+A `ring_intercom_camera.record` service is available for server-side video recording via WebRTC. This feature is **work in progress** and has known issues:
+
+- Recording duration may not match the requested `duration` parameter — videos are often shorter than expected
+- The recording uses aiortc (server-side WebRTC) + PyAV to capture frames and encode them as MP4
+- Timestamp handling between video and audio streams is not fully reliable yet
+
+**This feature should not be used in production.** It is experimental and may produce incomplete or corrupt video files.
+
+Usage:
+```yaml
+service: ring_intercom_camera.record
+data:
+  entity_id: camera.<device_name>_camera
+  filename: /media/ring_intercom/test.mp4
+  duration: 10
+```
+
 ## Why?
 
 The Ring Intercom Video replaces analog intercoms (e.g. Fermax, Tegui, Comelit) and includes a camera that digitizes the analog CVBS video signal. However:
