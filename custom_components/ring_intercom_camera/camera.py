@@ -455,14 +455,15 @@ class RingIntercomCamera(Camera):
         container = av.open(filename, mode="w")
         video_stream = None
         audio_stream = None
+        video_frame_count = 0
+        audio_frame_count = 0
 
         @pc.on("track")
         async def on_track(track):
             nonlocal video_stream, audio_stream
+            nonlocal video_frame_count, audio_frame_count
 
             if track.kind == "video":
-                # Create video stream on first frame to get dimensions
-                video_frame_count = 0
                 try:
                     while not recording_done.is_set():
                         frame = await asyncio.wait_for(track.recv(), timeout=5)
@@ -473,20 +474,25 @@ class RingIntercomCamera(Camera):
                             video_stream.width = frame.width
                             video_stream.height = frame.height
                             video_stream.pix_fmt = "yuv420p"
+                            _LOGGER.info(
+                                "Recording video stream: %dx%d",
+                                frame.width, frame.height,
+                            )
                         # Override timestamps — WebRTC pts/time_base can be
                         # unreliable and produce multi-hour recordings.
-                        # Use sequential PTS based on frame count and stream rate.
                         frame.pts = video_frame_count
                         frame.time_base = video_stream.time_base
                         video_frame_count += 1
                         for packet in video_stream.encode(frame):
                             container.mux(packet)
-                except (asyncio.TimeoutError, Exception):
+                except asyncio.TimeoutError:
                     if not recording_done.is_set():
-                        _LOGGER.debug("Video track ended or timed out")
+                        _LOGGER.debug("Video track recv timeout")
+                except Exception as exc:
+                    if not recording_done.is_set():
+                        _LOGGER.warning("Video track error: %s", exc)
 
             elif track.kind == "audio":
-                audio_frame_count = 0
                 audio_pts = 0
                 try:
                     while not recording_done.is_set():
@@ -496,16 +502,22 @@ class RingIntercomCamera(Camera):
                                 "aac", rate=frame.sample_rate
                             )
                             audio_stream.layout = frame.layout.name
-                        # Override timestamps for correct audio sync
+                            _LOGGER.info(
+                                "Recording audio stream: %s @ %d Hz",
+                                frame.layout.name, frame.sample_rate,
+                            )
                         frame.pts = audio_pts
                         frame.time_base = audio_stream.time_base
                         audio_pts += frame.samples
                         audio_frame_count += 1
                         for packet in audio_stream.encode(frame):
                             container.mux(packet)
-                except (asyncio.TimeoutError, Exception):
+                except asyncio.TimeoutError:
                     if not recording_done.is_set():
-                        _LOGGER.debug("Audio track ended or timed out")
+                        _LOGGER.debug("Audio track recv timeout")
+                except Exception as exc:
+                    if not recording_done.is_set():
+                        _LOGGER.warning("Audio track error: %s", exc)
 
         pc.addTransceiver("video", direction="recvonly")
         pc.addTransceiver("audio", direction="recvonly")
@@ -568,6 +580,7 @@ class RingIntercomCamera(Camera):
                                     },
                                 }))
                         elif method == "close":
+                            _LOGGER.debug("Ring closed WebSocket during recording")
                             break
                     except asyncio.TimeoutError:
                         # Normal — just check if duration elapsed
@@ -586,6 +599,22 @@ class RingIntercomCamera(Camera):
 
                 # Close the container
                 container.close()
+
+                _LOGGER.info(
+                    "Recording finished: %d video frames, %d audio frames",
+                    video_frame_count, audio_frame_count,
+                )
+
+                # Delete file if no frames were captured
+                if video_frame_count == 0:
+                    _LOGGER.warning(
+                        "No video frames received, deleting empty recording: %s",
+                        filename,
+                    )
+                    try:
+                        os.remove(filename)
+                    except OSError:
+                        pass
 
                 # Clean close WebSocket
                 try:
@@ -606,6 +635,12 @@ class RingIntercomCamera(Camera):
             try:
                 container.close()
             except Exception:
+                pass
+            # Delete potentially corrupt file
+            try:
+                if os.path.exists(filename):
+                    os.remove(filename)
+            except OSError:
                 pass
         finally:
             await pc.close()
