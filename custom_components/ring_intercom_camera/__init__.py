@@ -15,14 +15,27 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import discovery
+import voluptuous as vol
+
+from homeassistant.const import ATTR_ENTITY_ID, Platform
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv, discovery
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "ring_intercom_camera"
 PLATFORMS = [Platform.CAMERA]
+
+# Custom service: ring_intercom_camera.record
+SERVICE_RECORD = "record"
+SERVICE_RECORD_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required("filename"): cv.string,
+        vol.Required("duration"): vol.All(vol.Coerce(int), vol.Range(min=1, max=300)),
+        vol.Optional("lookback", default=0): vol.Coerce(int),
+    }
+)
 
 
 def _patch_ring_other() -> None:
@@ -95,4 +108,33 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.async_create_task(
         discovery.async_load_platform(hass, Platform.CAMERA, DOMAIN, {}, config)
     )
+
+    async def handle_record_service(call: ServiceCall) -> None:
+        """Handle ring_intercom_camera.record service call."""
+        entity_id = call.data[ATTR_ENTITY_ID]
+        filename = call.data["filename"]
+        duration = call.data["duration"]
+        lookback = call.data.get("lookback", 0)
+
+        # Find the camera entity via the camera component's entity registry
+        component = hass.data.get("camera")
+        if not component:
+            _LOGGER.error("Camera component not loaded")
+            return
+
+        entity = component.get_entity(entity_id)
+        if not entity:
+            _LOGGER.error("Camera entity %s not found", entity_id)
+            return
+
+        _LOGGER.info(
+            "Recording service called for %s: %s (%ds)",
+            entity_id, filename, duration,
+        )
+        await entity.async_record(filename, duration, lookback)
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_RECORD, handle_record_service, schema=SERVICE_RECORD_SCHEMA
+    )
+
     return True

@@ -1,0 +1,37 @@
+record:
+  name: Record video clip
+  description: Record a video clip from a Ring Intercom Video camera via server-side WebRTC.
+  fields:
+    entity_id:
+      name: Entity
+      description: The camera entity to record from.
+      required: true
+      selector:
+        entity:
+          integration: ring_intercom_camera
+          domain: camera
+    filename:
+      name: Filename
+      description: Path to save the recorded video file (e.g. /media/ring_intercom/clip.mp4).
+      required: true
+      selector:
+        text:
+    duration:
+      name: Duration
+      description: Duration of the recording in seconds (1-300).
+      required: true
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 300
+          unit_of_measurement: seconds
+    lookback:
+      name: Lookback
+      description: "Not supported. Recording starts immediately."
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 0
