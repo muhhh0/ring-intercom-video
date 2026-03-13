@@ -462,6 +462,7 @@ class RingIntercomCamera(Camera):
 
             if track.kind == "video":
                 # Create video stream on first frame to get dimensions
+                video_frame_count = 0
                 try:
                     while not recording_done.is_set():
                         frame = await asyncio.wait_for(track.recv(), timeout=5)
@@ -472,6 +473,12 @@ class RingIntercomCamera(Camera):
                             video_stream.width = frame.width
                             video_stream.height = frame.height
                             video_stream.pix_fmt = "yuv420p"
+                        # Override timestamps — WebRTC pts/time_base can be
+                        # unreliable and produce multi-hour recordings.
+                        # Use sequential PTS based on frame count and stream rate.
+                        frame.pts = video_frame_count
+                        frame.time_base = video_stream.time_base
+                        video_frame_count += 1
                         for packet in video_stream.encode(frame):
                             container.mux(packet)
                 except (asyncio.TimeoutError, Exception):
@@ -479,6 +486,8 @@ class RingIntercomCamera(Camera):
                         _LOGGER.debug("Video track ended or timed out")
 
             elif track.kind == "audio":
+                audio_frame_count = 0
+                audio_pts = 0
                 try:
                     while not recording_done.is_set():
                         frame = await asyncio.wait_for(track.recv(), timeout=5)
@@ -487,6 +496,11 @@ class RingIntercomCamera(Camera):
                                 "aac", rate=frame.sample_rate
                             )
                             audio_stream.layout = frame.layout.name
+                        # Override timestamps for correct audio sync
+                        frame.pts = audio_pts
+                        frame.time_base = audio_stream.time_base
+                        audio_pts += frame.samples
+                        audio_frame_count += 1
                         for packet in audio_stream.encode(frame):
                             container.mux(packet)
                 except (asyncio.TimeoutError, Exception):
