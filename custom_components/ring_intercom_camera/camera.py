@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import ssl
 import time
 from io import BytesIO
 from typing import Any
@@ -47,6 +48,9 @@ SNAPSHOT_MAX_FRAMES = 75         # Max frames to examine (~3s at 25fps)
 SNAPSHOT_BRIGHTNESS_THRESHOLD = 25  # Min brightness to consider "real" video
 SNAPSHOT_STABILIZE_FRAMES = 5    # Consecutive bright frames before capture
 SNAPSHOT_CACHE_SECONDS = 10      # Don't re-capture within this window
+
+# Shared SSL context for WebSocket connections (created once to avoid blocking I/O)
+_SSL_CTX: ssl.SSLContext = ssl.create_default_context()
 
 
 async def async_setup_platform(
@@ -184,7 +188,6 @@ class RingIntercomCamera(Camera):
         )
 
         import json
-        import ssl
         import uuid
 
         from websockets.asyncio.client import connect as ws_connect
@@ -275,13 +278,11 @@ class RingIntercomCamera(Camera):
         dialog_id = str(uuid.uuid4())
         session_id = None
 
-        ssl_ctx = ssl.create_default_context()
-
         try:
             async with ws_connect(
                 ws_uri,
                 user_agent_header="android:com.ringapp",
-                ssl=ssl_ctx,
+                ssl=_SSL_CTX,
             ) as ws:
                 await ws.send(json.dumps({
                     "method": "live_view",
@@ -431,7 +432,6 @@ class RingIntercomCamera(Camera):
             RTC_STREAMING_WEB_SOCKET_ENDPOINT,
         )
         import json
-        import ssl
         import uuid
         from websockets.asyncio.client import connect as ws_connect
 
@@ -503,13 +503,11 @@ class RingIntercomCamera(Camera):
         dialog_id = str(uuid.uuid4())
         session_id = None
 
-        ssl_ctx = ssl.create_default_context()
-
         try:
             async with ws_connect(
                 ws_uri,
                 user_agent_header="android:com.ringapp",
-                ssl=ssl_ctx,
+                ssl=_SSL_CTX,
             ) as ws:
                 await ws.send(json.dumps({
                     "method": "live_view",
