@@ -465,7 +465,6 @@ class RingIntercomCamera(Camera):
             nonlocal video_frame_count, audio_frame_count
 
             if track.kind == "video":
-                video_time_base = fractions.Fraction(1, 90000)
                 try:
                     while not recording_done.is_set():
                         frame = await asyncio.wait_for(track.recv(), timeout=5)
@@ -594,6 +593,9 @@ class RingIntercomCamera(Camera):
 
                 # Duration reached — stop recording
                 recording_done.set()
+
+                # Brief pause to let track handlers finish their last recv/encode
+                await asyncio.sleep(0.5)
 
                 # Flush remaining frames
                 if video_stream:
